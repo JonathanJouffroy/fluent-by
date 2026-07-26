@@ -16,6 +16,16 @@ const inter = Inter({
 export const metadata = {
   title: 'Fluent by',
   description: "Une app d'apprentissage de langue orientée objectifs.",
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Fluent by',
+  },
+};
+
+export const viewport = {
+  themeColor: '#4F6B4C',
 };
 
 export default function RootLayout({ children }) {
