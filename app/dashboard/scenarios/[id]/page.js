@@ -6,12 +6,14 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/client';
+import { db } from '@/lib/firebase/client';
+import { useAuthUser } from '@/lib/firebase/useAuthUser';
 
 function ChatScenarioContent() {
   const { id } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const user = useAuthUser();
 
   const [objectif, setObjectif] = useState(null);
   const [objectifId, setObjectifId] = useState(searchParams.get('objectif'));
@@ -25,30 +27,38 @@ function ChatScenarioContent() {
   const bodyRef = useRef(null);
 
   useEffect(() => {
-    (async () => {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      let objId = objectifId;
-      if (!objId) {
-        const objSnap = await getDocs(
-          query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
-        );
-        if (!objSnap.empty) objId = objSnap.docs[0].id;
-        setObjectifId(objId);
-      }
-      if (!objId) return;
-
-      const objDoc = await getDoc(doc(db, 'objectifs', objId));
-      setObjectif(objDoc.data());
-
-      const scenDoc = await getDoc(doc(db, 'objectifs', objId, 'scenarios', id));
-      const scenData = { id: scenDoc.id, ...scenDoc.data() };
-      setScenario(scenData);
-      setMessages(scenData.messages || []);
+    if (user === undefined) return;
+    if (user === null) {
       setLoading(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        let objId = objectifId;
+        if (!objId) {
+          const objSnap = await getDocs(
+            query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
+          );
+          if (!objSnap.empty) objId = objSnap.docs[0].id;
+          setObjectifId(objId);
+        }
+        if (!objId) return;
+
+        const objDoc = await getDoc(doc(db, 'objectifs', objId));
+        setObjectif(objDoc.data());
+
+        const scenDoc = await getDoc(doc(db, 'objectifs', objId, 'scenarios', id));
+        const scenData = { id: scenDoc.id, ...scenDoc.data() };
+        setScenario(scenData);
+        setMessages(scenData.messages || []);
+      } catch (err) {
+        console.error('ChatScenarioContent load error:', err);
+      } finally {
+        setLoading(false);
+      }
     })();
-  }, [id]);
+  }, [id, user]);
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;

@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { updatePassword, signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase/client';
+import { useAuthUser } from '@/lib/firebase/useAuthUser';
 
 const LANGUES = ['Espagnol', 'Anglais', 'Italien', 'Allemand', 'Portugais', 'Japonais'];
 const TYPES = [
@@ -34,6 +35,7 @@ const NIVEAUX = [
 
 export default function ComptePage() {
   const router = useRouter();
+  const user = useAuthUser();
 
   const [email, setEmail] = useState('');
   const [objectif, setObjectif] = useState(null);
@@ -53,22 +55,31 @@ export default function ComptePage() {
   const [deleteError, setDeleteError] = useState(null);
 
   useEffect(() => {
-    (async () => {
-      const user = auth.currentUser;
-      if (!user) return;
-      setEmail(user.email);
-
-      const objSnap = await getDocs(
-        query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
-      );
-      if (!objSnap.empty) {
-        setObjectif(objSnap.docs[0].data());
-        setOriginalObjectif(objSnap.docs[0].data());
-        setObjectifId(objSnap.docs[0].id);
-      }
+    if (user === undefined) return;
+    if (user === null) {
       setLoading(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        setEmail(user.email);
+
+        const objSnap = await getDocs(
+          query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
+        );
+        if (!objSnap.empty) {
+          setObjectif(objSnap.docs[0].data());
+          setOriginalObjectif(objSnap.docs[0].data());
+          setObjectifId(objSnap.docs[0].id);
+        }
+      } catch (err) {
+        console.error('ComptePage load error:', err);
+      } finally {
+        setLoading(false);
+      }
     })();
-  }, []);
+  }, [user]);
 
   const handleSaveClick = () => {
     const metier = objectif.type === 'travail' ? objectif.metier || '' : '';

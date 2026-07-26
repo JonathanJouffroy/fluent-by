@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/client';
+import { db } from '@/lib/firebase/client';
+import { useAuthUser } from '@/lib/firebase/useAuthUser';
 
 function daysLeft(dateStr) {
   if (!dateStr) return null;
@@ -13,35 +14,42 @@ function daysLeft(dateStr) {
 }
 
 export default function ProgressionPage() {
+  const user = useAuthUser();
   const [objectif, setObjectif] = useState(null);
   const [words, setWords] = useState([]);
   const [scenarios, setScenarios] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const objSnap = await getDocs(
-        query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
-      );
-      if (objSnap.empty) {
-        setLoading(false);
-        return;
-      }
-      const objDoc = objSnap.docs[0];
-      setObjectif(objDoc.data());
-
-      const [motsSnap, scenSnap] = await Promise.all([
-        getDocs(collection(db, 'objectifs', objDoc.id, 'mots')),
-        getDocs(collection(db, 'objectifs', objDoc.id, 'scenarios')),
-      ]);
-      setWords(motsSnap.docs.map((d) => d.data()));
-      setScenarios(scenSnap.docs.map((d) => d.data()));
+    if (user === undefined) return; // état auth pas encore résolu, on attend
+    if (user === null) {
       setLoading(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        const objSnap = await getDocs(
+          query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
+        );
+        if (objSnap.empty) return;
+
+        const objDoc = objSnap.docs[0];
+        setObjectif(objDoc.data());
+
+        const [motsSnap, scenSnap] = await Promise.all([
+          getDocs(collection(db, 'objectifs', objDoc.id, 'mots')),
+          getDocs(collection(db, 'objectifs', objDoc.id, 'scenarios')),
+        ]);
+        setWords(motsSnap.docs.map((d) => d.data()));
+        setScenarios(scenSnap.docs.map((d) => d.data()));
+      } catch (err) {
+        console.error('ProgressionPage load error:', err);
+      } finally {
+        setLoading(false);
+      }
     })();
-  }, []);
+  }, [user]);
 
   if (loading) {
     return (

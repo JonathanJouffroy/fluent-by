@@ -5,35 +5,43 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/client';
+import { db } from '@/lib/firebase/client';
+import { useAuthUser } from '@/lib/firebase/useAuthUser';
 
 export default function ScenariosPage() {
+  const user = useAuthUser();
   const [objectifId, setObjectifId] = useState(null);
   const [scenarios, setScenarios] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const objSnap = await getDocs(
-        query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
-      );
-      if (objSnap.empty) {
-        setLoading(false);
-        return;
-      }
-      const objId = objSnap.docs[0].id;
-      setObjectifId(objId);
-
-      const scenSnap = await getDocs(
-        query(collection(db, 'objectifs', objId, 'scenarios'), orderBy('createdAt', 'asc'))
-      );
-      setScenarios(scenSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    if (user === undefined) return;
+    if (user === null) {
       setLoading(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        const objSnap = await getDocs(
+          query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
+        );
+        if (objSnap.empty) return;
+
+        const objId = objSnap.docs[0].id;
+        setObjectifId(objId);
+
+        const scenSnap = await getDocs(
+          query(collection(db, 'objectifs', objId, 'scenarios'), orderBy('createdAt', 'asc'))
+        );
+        setScenarios(scenSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error('ScenariosPage load error:', err);
+      } finally {
+        setLoading(false);
+      }
     })();
-  }, []);
+  }, [user]);
 
   if (loading) {
     return (

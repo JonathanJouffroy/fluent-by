@@ -37,16 +37,23 @@ Remplis :
 
 ⚠️ Les variables `FIREBASE_ADMIN_*` sont des secrets serveur : ne jamais les préfixer par `NEXT_PUBLIC_`.
 
-## 5. Déployer les règles de sécurité Firestore
+## 5. Déployer les règles de sécurité et l'index Firestore
 
 ```bash
 npm install -g firebase-tools
 firebase login
 firebase use --add   # sélectionne ton projet Firebase
-firebase deploy --only firestore:rules
+firebase deploy --only firestore:rules,firestore:indexes
 ```
 
-Sans cette étape, Firestore refusera toutes les lectures/écritures (comportement par défaut du mode production).
+Sans les règles, Firestore refuse toutes les lectures/écritures (mode production par défaut).
+Sans l'index composite (`objectifs` : `uid` + `createdAt`), toute requête qui filtre par utilisateur
+et trie par date de création échoue avec une erreur `FAILED_PRECONDITION` — ce qui provoque un
+**500 sur `/dashboard`** puisque c'est exactement la requête faite par le layout du dashboard.
+
+Alternative sans CLI : si tu préfères ne pas installer `firebase-tools`, laisse l'app planter une
+fois en prod, ouvre les **Runtime Logs** de la fonction concernée sur Vercel, et Firestore y affiche
+un lien direct "Create index" qui pré-remplit tout dans la console Firebase.
 
 ## 6. Lancer en local
 
@@ -116,6 +123,14 @@ objectifs/{objectifId}
 Contrairement au schéma SQL de la version Supabase, la répétition espacée est stockée directement
 sur le document `mot` (pas de table séparée), et les messages de conversation sont stockés dans le
 document `scenario` — plus adapté à un modèle NoSQL orienté documents.
+
+## PWA (installation sur écran d'accueil)
+
+L'app est installable comme une PWA basique grâce à `public/manifest.json` et aux icônes dans
+`public/icons/`. Sur mobile (Chrome Android ou Safari iOS), l'utilisateur peut choisir
+"Ajouter à l'écran d'accueil" et l'app s'ouvrira en plein écran avec le logo comme icône.
+Ce n'est pas une PWA complète (pas de service worker, donc pas de fonctionnement hors-ligne) —
+juste l'installabilité et l'icône, ce qui couvre l'essentiel pour un usage mobile confortable.
 
 ## Couverture du MVP
 

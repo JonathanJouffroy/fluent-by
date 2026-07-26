@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/client';
+import { db } from '@/lib/firebase/client';
+import { useAuthUser } from '@/lib/firebase/useAuthUser';
 
 const LANGUES = ['Espagnol', 'Anglais', 'Italien', 'Allemand', 'Portugais', 'Japonais'];
 const TYPES = [
@@ -21,6 +22,7 @@ const NIVEAUX = [
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const user = useAuthUser();
 
   const [langue, setLangue] = useState('Espagnol');
   const [type, setType] = useState('voyage');
@@ -34,7 +36,6 @@ export default function OnboardingPage() {
     setLoading(true);
     setError(null);
     try {
-      const user = auth.currentUser;
       if (!user) throw new Error('not authenticated');
 
       const payload = { langue, type, niveau, metier: type === 'travail' ? metier.trim() : '' };

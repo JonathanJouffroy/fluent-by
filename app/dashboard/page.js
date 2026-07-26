@@ -14,6 +14,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
+import { useAuthUser } from '@/lib/firebase/useAuthUser';
 import { computeNextReview, isDue } from '@/lib/spacedRepetition';
 
 function daysLeft(dateStr) {
@@ -25,6 +26,7 @@ function daysLeft(dateStr) {
 const TYPE_LABELS = { voyage: 'Voyage', travail: 'Travail', personnel: 'Personnel' };
 
 export default function HomePage() {
+  const user = useAuthUser();
   const [objectif, setObjectif] = useState(null);
   const [objectifId, setObjectifId] = useState(null);
   const [dueWords, setDueWords] = useState([]);
@@ -33,45 +35,52 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    const user = auth.currentUser;
     if (!user) return;
 
-    const objQuery = query(
-      collection(db, 'objectifs'),
-      where('uid', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(1)
-    );
-    const objSnap = await getDocs(objQuery);
-    if (objSnap.empty) {
+    try {
+      const objQuery = query(
+        collection(db, 'objectifs'),
+        where('uid', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(1)
+      );
+      const objSnap = await getDocs(objQuery);
+      if (objSnap.empty) return;
+
+      const objDoc = objSnap.docs[0];
+      setObjectif(objDoc.data());
+      setObjectifId(objDoc.id);
+
+      const motsSnap = await getDocs(
+        query(collection(db, 'objectifs', objDoc.id, 'mots'), orderBy('date_decouverte', 'asc'))
+      );
+      const all = motsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setTotalWords(all.length);
+
+      const due = all
+        .filter((w) => isDue(w))
+        .sort((a, b) => {
+          if (!a.prochaine_revision) return -1;
+          if (!b.prochaine_revision) return 1;
+          return new Date(a.prochaine_revision) - new Date(b.prochaine_revision);
+        });
+      setDueWords(due);
+      setIdx(0);
+    } catch (err) {
+      console.error('HomePage load error:', err);
+    } finally {
       setLoading(false);
-      return;
     }
-    const objDoc = objSnap.docs[0];
-    setObjectif(objDoc.data());
-    setObjectifId(objDoc.id);
-
-    const motsSnap = await getDocs(
-      query(collection(db, 'objectifs', objDoc.id, 'mots'), orderBy('date_decouverte', 'asc'))
-    );
-    const all = motsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    setTotalWords(all.length);
-
-    const due = all
-      .filter((w) => isDue(w))
-      .sort((a, b) => {
-        if (!a.prochaine_revision) return -1;
-        if (!b.prochaine_revision) return 1;
-        return new Date(a.prochaine_revision) - new Date(b.prochaine_revision);
-      });
-    setDueWords(due);
-    setIdx(0);
-    setLoading(false);
   };
 
   useEffect(() => {
+    if (user === undefined) return;
+    if (user === null) {
+      setLoading(false);
+      return;
+    }
     load();
-  }, []);
+  }, [user]);
 
   const mark = async (known) => {
     const word = dueWords[idx];
