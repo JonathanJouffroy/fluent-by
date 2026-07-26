@@ -59,7 +59,7 @@ export default function ProgressionPage() {
     );
   }
 
-  const learned = words.filter((w) => w.mastery === 'appris').length;
+  const learned = words.filter((w) => (w.niveau_maitrise || 0) >= 1).length;
   const done = scenarios.filter((s) => s.complete).length;
   const remaining = objectif?.date_echeance ? daysLeft(objectif.date_echeance) : null;
 
