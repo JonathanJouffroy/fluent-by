@@ -51,6 +51,8 @@ export default function ProgressionPage() {
   const [scenarios, setScenarios] = useState([]);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showWords, setShowWords] = useState(false);
+  const [showScenarios, setShowScenarios] = useState(false);
 
   useEffect(() => {
     if (user === undefined) return;
@@ -126,8 +128,14 @@ export default function ProgressionPage() {
     <div className="pt-2">
       <p className="text-xs font-semibold uppercase tracking-wide text-inkSoft mb-3">Ta progression</p>
 
-      <div className="bg-white border border-line rounded-2xl p-5 mb-3.5">
-        <p className="text-[13px] text-inkSoft mb-1.5">Mots maîtrisés</p>
+      <button
+        onClick={() => setShowWords((v) => !v)}
+        className="w-full text-left bg-white border border-line rounded-2xl p-5 mb-3.5"
+      >
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-[13px] text-inkSoft">Mots maîtrisés</p>
+          <span className="text-inkSoft text-sm">{showWords ? '▲' : '▼'}</span>
+        </div>
         <p className="font-display text-3xl mb-2.5">
           {learned}
           <span className="text-base text-inkSoft"> / {words.length}</span>
@@ -138,10 +146,32 @@ export default function ProgressionPage() {
             style={{ width: `${words.length ? (learned / words.length) * 100 : 0}%` }}
           />
         </div>
-      </div>
+        {showWords && (
+          <div className="mt-4 pt-4 border-t border-line" onClick={(e) => e.stopPropagation()}>
+            {words.filter((w) => (w.niveau_maitrise || 0) >= 1).length ? (
+              words
+                .filter((w) => (w.niveau_maitrise || 0) >= 1)
+                .map((w, i) => (
+                  <div key={i} className="flex items-baseline justify-between py-1.5 text-sm">
+                    <span className="font-display">{w.terme}</span>
+                    <span className="text-coralDark font-semibold">{w.traduction}</span>
+                  </div>
+                ))
+            ) : (
+              <p className="text-sm text-inkSoft">Aucun mot maîtrisé pour l'instant.</p>
+            )}
+          </div>
+        )}
+      </button>
 
-      <div className="bg-white border border-line rounded-2xl p-5 mb-3.5">
-        <p className="text-[13px] text-inkSoft mb-1.5">Scénarios complétés</p>
+      <button
+        onClick={() => setShowScenarios((v) => !v)}
+        className="w-full text-left bg-white border border-line rounded-2xl p-5 mb-3.5"
+      >
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-[13px] text-inkSoft">Scénarios complétés</p>
+          <span className="text-inkSoft text-sm">{showScenarios ? '▲' : '▼'}</span>
+        </div>
         <p className="font-display text-3xl mb-2.5">
           {done}
           <span className="text-base text-inkSoft"> / {scenarios.length}</span>
@@ -152,7 +182,22 @@ export default function ProgressionPage() {
             style={{ width: `${scenarios.length ? (done / scenarios.length) * 100 : 0}%` }}
           />
         </div>
-      </div>
+        {showScenarios && (
+          <div className="mt-4 pt-4 border-t border-line" onClick={(e) => e.stopPropagation()}>
+            {scenarios.filter((s) => s.complete).length ? (
+              scenarios
+                .filter((s) => s.complete)
+                .map((s, i) => (
+                  <p key={i} className="text-sm py-1.5">
+                    {s.titre}
+                  </p>
+                ))
+            ) : (
+              <p className="text-sm text-inkSoft">Aucun scénario complété pour l'instant.</p>
+            )}
+          </div>
+        )}
+      </button>
 
       <div className="bg-white border border-line rounded-2xl p-5 mb-3.5">
         <p className="text-[13px] text-inkSoft mb-3">Régularité (7 derniers jours)</p>
