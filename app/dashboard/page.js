@@ -84,31 +84,39 @@ export default function HomePage() {
     load();
   }, [user]);
 
+  const [markError, setMarkError] = useState(null);
+
   const mark = async (known) => {
     const word = dueWords[idx];
-    const { niveau_maitrise, prochaine_revision, mastery } = computeNextReview(
-      word.niveau_maitrise || 0,
-      known
-    );
+    setMarkError(null);
+    try {
+      const { niveau_maitrise, prochaine_revision, mastery } = computeNextReview(
+        word.niveau_maitrise || 0,
+        known
+      );
 
-    await updateDoc(doc(db, 'objectifs', objectifId, 'mots', word.id), {
-      niveau_maitrise,
-      prochaine_revision,
-      mastery,
-    });
+      await updateDoc(doc(db, 'objectifs', objectifId, 'mots', word.id), {
+        niveau_maitrise,
+        prochaine_revision,
+        mastery,
+      });
 
-    addDoc(collection(db, 'objectifs', objectifId, 'activity'), {
-      type: 'mot_revise',
-      known,
-      date: new Date().toISOString().slice(0, 10),
-      createdAt: serverTimestamp(),
-    }).catch((err) => console.error('activity log error:', err));
+      addDoc(collection(db, 'objectifs', objectifId, 'activity'), {
+        type: 'mot_revise',
+        known,
+        date: new Date().toISOString().slice(0, 10),
+        createdAt: serverTimestamp(),
+      }).catch((err) => console.error('activity log error:', err));
 
-    if (idx < dueWords.length - 1) {
-      setIdx(idx + 1);
-    } else {
-      setDueWords((prev) => prev.filter((_, i) => i !== idx));
-      setIdx(0);
+      if (idx < dueWords.length - 1) {
+        setIdx(idx + 1);
+      } else {
+        setDueWords((prev) => prev.filter((_, i) => i !== idx));
+        setIdx(0);
+      }
+    } catch (err) {
+      console.error('mark() error:', err);
+      setMarkError("La mise à jour a échoué. Vérifie ta connexion et réessaie.");
     }
   };
 
@@ -186,6 +194,10 @@ export default function HomePage() {
               Je connais déjà
             </button>
           </div>
+
+          {markError && (
+            <p className="text-sm text-coralDark bg-coralPale px-4 py-2 rounded-xl mb-2">{markError}</p>
+          )}
         </>
       )}
     </div>
