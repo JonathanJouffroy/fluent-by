@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   collection,
   query,
@@ -395,6 +396,13 @@ export default function ComptePage() {
           </button>
         </form>
       </div>
+
+      <Link
+        href="/dashboard/fiche"
+        className="w-full block text-center py-3.5 rounded-2xl bg-sagePale text-sageDark font-semibold mb-4"
+      >
+        Voir ma fiche récap
+      </Link>
 
       <button
         onClick={logout}

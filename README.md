@@ -132,6 +132,26 @@ L'app est installable comme une PWA basique grâce à `public/manifest.json` et 
 Ce n'est pas une PWA complète (pas de service worker, donc pas de fonctionnement hors-ligne) —
 juste l'installabilité et l'icône, ce qui couvre l'essentiel pour un usage mobile confortable.
 
+## Nouvelles fonctionnalités (V2)
+
+- **Scénario à la demande** — sur l'écran Scénarios, bouton "+ Ma situation" : décris une situation libre
+  ("je vais chez le médecin en Espagne"), un scénario sur-mesure est généré via Groq et ajouté à la liste.
+- **Fiche récap exportable** — `/dashboard/fiche` (lien depuis Mon compte) : liste le vocabulaire et les
+  scénarios de l'objectif courant, avec un bouton "Exporter / Imprimer" (`window.print()`). Sur mobile,
+  choisir "Enregistrer en PDF" dans la boîte de dialogue d'impression pour la garder hors-ligne.
+- **Statistiques enrichies** — Progression affiche maintenant un indicateur de régularité (jours actifs
+  sur les 7 derniers jours) et un histogramme des mots révisés par semaine (6 dernières semaines). Basé
+  sur une nouvelle sous-collection `objectifs/{id}/activity` qui logue chaque révision de mot et chaque
+  scénario terminé. ⚠️ Nécessite de redéployer `firestore.rules` (nouvelle règle pour cette sous-collection) :
+  `firebase deploy --only firestore:rules`, ou copier-coller la règle `activity` dans la console Firebase.
+- **Conversation vocale** — dans l'écran de conversation : bouton 🔊 sous chaque réplique de l'IA (lecture
+  à voix haute via `SpeechSynthesisUtterance`, langue adaptée à l'objectif), et bouton 🎤 pour dicter sa
+  réponse au lieu de taper (`SpeechRecognition`). Un indicateur "Clarté de la reconnaissance vocale : X%"
+  s'affiche après une dictée — **attention, ce n'est pas une vraie évaluation phonétique de prononciation**,
+  juste le score de confiance que le navigateur attribue à sa propre transcription. Ces deux boutons ne
+  s'affichent que si le navigateur supporte les Web Speech APIs (Chrome/Edge principalement ; support
+  partiel ou absent sur Firefox et Safari selon les versions) — l'app reste utilisable sans, en tapant.
+
 ## Couverture du MVP
 
 - ✅ Authentification (inscription, connexion, mot de passe oublié, changement de mot de passe)

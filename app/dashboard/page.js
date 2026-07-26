@@ -12,8 +12,10 @@ import {
   getDocs,
   doc,
   updateDoc,
+  addDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/client';
+import { db } from '@/lib/firebase/client';
 import { useAuthUser } from '@/lib/firebase/useAuthUser';
 import { computeNextReview, isDue } from '@/lib/spacedRepetition';
 
@@ -95,6 +97,13 @@ export default function HomePage() {
       mastery,
     });
 
+    addDoc(collection(db, 'objectifs', objectifId, 'activity'), {
+      type: 'mot_revise',
+      known,
+      date: new Date().toISOString().slice(0, 10),
+      createdAt: serverTimestamp(),
+    }).catch((err) => console.error('activity log error:', err));
+
     if (idx < dueWords.length - 1) {
       setIdx(idx + 1);
     } else {
@@ -146,7 +155,7 @@ export default function HomePage() {
           <div className="relative h-[250px] mb-4">
             <div className="absolute inset-0 bg-white rounded-xl2 p-6 flex flex-col justify-between border border-line shadow-[0_10px_30px_-12px_rgba(44,54,48,0.18)]">
               <div>
-                {dueWords[idx].mastery === 'appris' && (
+                {(dueWords[idx].niveau_maitrise || 0) >= 1 && (
                   <span className="text-[11px] bg-sagePale text-sageDark px-2.5 py-1 rounded-full font-semibold">
                     Appris
                   </span>

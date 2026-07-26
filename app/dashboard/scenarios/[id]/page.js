@@ -4,10 +4,11 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuthUser } from '@/lib/firebase/useAuthUser';
+import { toLangCode } from '@/lib/langCodes';
 
 function ChatScenarioContent() {
   const { id } = useParams();
@@ -23,8 +24,18 @@ function ChatScenarioContent() {
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [speakingIdx, setSpeakingIdx] = useState(null);
+  const [listening, setListening] = useState(false);
+  const [lastConfidence, setLastConfidence] = useState(null);
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const started = useRef(false);
   const bodyRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setVoiceSupported(Boolean(SpeechRecognitionImpl) && Boolean(window.speechSynthesis));
+  }, []);
 
   useEffect(() => {
     if (user === undefined) return;
@@ -117,6 +128,46 @@ function ChatScenarioContent() {
     }
   }, [loading, objectif, scenario]);
 
+  const speak = (text, idx) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = toLangCode(objectif.langue_cible);
+    const voices = window.speechSynthesis.getVoices();
+    const match = voices.find((v) => v.lang === utterance.lang) || voices.find((v) => v.lang?.startsWith(utterance.lang.slice(0, 2)));
+    if (match) utterance.voice = match;
+    utterance.onstart = () => setSpeakingIdx(idx);
+    utterance.onend = () => setSpeakingIdx(null);
+    utterance.onerror = () => setSpeakingIdx(null);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const startListening = () => {
+    const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionImpl || listening) return;
+
+    const recognition = new SpeechRecognitionImpl();
+    recognition.lang = toLangCode(objectif.langue_cible);
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setListening(true);
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+    recognition.onresult = (event) => {
+      const result = event.results[0][0];
+      setInput(result.transcript);
+      setLastConfidence(typeof result.confidence === 'number' ? result.confidence : null);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const stopListening = () => {
+    recognitionRef.current?.stop();
+  };
+
   const send = () => {
     if (!input.trim() || thinking) return;
     const userText = input.trim();
@@ -124,11 +175,17 @@ function ChatScenarioContent() {
     setMessages(newHistory);
     persist(newHistory);
     setInput('');
+    setLastConfidence(null);
     requestReply(messages, userText, true);
   };
 
   const finishScenario = async () => {
     await updateDoc(doc(db, 'objectifs', objectifId, 'scenarios', id), { complete: true });
+    addDoc(collection(db, 'objectifs', objectifId, 'activity'), {
+      type: 'scenario_complete',
+      date: new Date().toISOString().slice(0, 10),
+      createdAt: serverTimestamp(),
+    }).catch((err) => console.error('activity log error:', err));
     router.push('/dashboard/scenarios');
   };
 
@@ -166,6 +223,14 @@ function ChatScenarioContent() {
             >
               {m.role === 'assistant' ? m.reply : m.content}
             </div>
+            {m.role === 'assistant' && voiceSupported && (
+              <button
+                onClick={() => speak(m.reply, i)}
+                className="mt-1 text-[11px] text-sageDark font-semibold flex items-center gap-1"
+              >
+                {speakingIdx === i ? '🔊 En cours…' : '🔊 Écouter'}
+              </button>
+            )}
             {m.role === 'user' && m.correction && (
               <div className="mt-1.5 text-[12.5px] text-coralDark bg-coralPale px-3 py-2 rounded-xl leading-snug">
                 <b>Correction · </b>
@@ -194,11 +259,30 @@ function ChatScenarioContent() {
         </button>
       )}
 
+      {lastConfidence !== null && (
+        <p className="mx-4 mb-1 text-[11px] text-inkSoft">
+          Clarté de la reconnaissance vocale : {Math.round(lastConfidence * 100)}%
+        </p>
+      )}
+
       <div className="flex gap-2.5 px-4 py-3.5 border-t border-line bg-white pb-[calc(0.875rem+env(safe-area-inset-bottom))]">
+        {voiceSupported && (
+          <button
+            onClick={listening ? stopListening : startListening}
+            className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${
+              listening ? 'bg-coral text-white animate-pulse' : 'bg-sagePale text-sageDark'
+            }`}
+          >
+            🎤
+          </button>
+        )}
         <input
           placeholder={`Réponds en ${objectif.langue_cible}…`}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            setLastConfidence(null);
+          }}
           onKeyDown={(e) => e.key === 'Enter' && send()}
           className="flex-1 border border-line rounded-full px-4.5 py-3 text-[15px]"
         />
