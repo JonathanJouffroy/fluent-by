@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 
-export default function ChatScenarioPage() {
+function ChatScenarioContent() {
   const { id } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -199,5 +201,19 @@ export default function ChatScenarioPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function ChatScenarioPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 rounded-full border-4 border-sagePale border-t-sageDark animate-spin" />
+        </div>
+      }
+    >
+      <ChatScenarioContent />
+    </Suspense>
   );
 }
