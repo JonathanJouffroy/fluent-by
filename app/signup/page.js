@@ -8,10 +8,12 @@ import Link from 'next/link';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase/client';
 
-function friendlyError(code) {
+function friendlyAuthError(code) {
   if (code === 'auth/email-already-in-use') return 'Un compte existe déjà avec cet email.';
   if (code === 'auth/weak-password') return 'Mot de passe trop court (6 caractères minimum).';
   if (code === 'auth/invalid-email') return 'Email invalide.';
+  if (code === 'auth/operation-not-allowed')
+    return "La connexion par email/mot de passe n'est pas activée sur ce projet Firebase.";
   return "L'inscription a échoué, réessaie.";
 }
 
@@ -26,21 +28,37 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      const idToken = await cred.user.getIdToken();
 
+    let cred;
+    try {
+      cred = await createUserWithEmailAndPassword(auth, email, password);
+    } catch (authError) {
+      console.error('signup auth error:', authError);
+      setError(friendlyAuthError(authError.code));
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const idToken = await cred.user.getIdToken();
       const res = await fetch('/api/auth/session', {
         method: 'POST',
         body: JSON.stringify({ idToken }),
       });
-      if (!res.ok) throw new Error('session failed');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error('session creation failed:', data);
+        throw new Error(data.error || 'session failed');
+      }
 
       router.push('/onboarding');
       router.refresh();
-    } catch (e) {
-      setError(friendlyError(e.code));
-    } finally {
+    } catch (sessionError) {
+      console.error('signup session error:', sessionError);
+      // Le compte Firebase a bien été créé à ce stade : on ne le fait pas repasser par "créer un compte".
+      setError(
+        'Ton compte a été créé, mais la connexion automatique a échoué. Essaie de te connecter avec ton email et ton mot de passe.'
+      );
       setLoading(false);
     }
   };
