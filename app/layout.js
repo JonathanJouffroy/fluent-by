@@ -22,6 +22,9 @@ export const metadata = {
     statusBarStyle: 'default',
     title: 'Fluent by',
   },
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
 };
 
 export const viewport = {
