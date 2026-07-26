@@ -4,7 +4,19 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, orderBy, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  doc,
+  updateDoc,
+  addDoc,
+  deleteDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { updatePassword, signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase/client';
 
@@ -25,10 +37,12 @@ export default function ComptePage() {
 
   const [email, setEmail] = useState('');
   const [objectif, setObjectif] = useState(null);
+  const [originalObjectif, setOriginalObjectif] = useState(null);
   const [objectifId, setObjectifId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingObjectif, setSavingObjectif] = useState(false);
   const [objectifMsg, setObjectifMsg] = useState(null);
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false);
 
   const [newPassword, setNewPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState(null);
@@ -49,25 +63,105 @@ export default function ComptePage() {
       );
       if (!objSnap.empty) {
         setObjectif(objSnap.docs[0].data());
+        setOriginalObjectif(objSnap.docs[0].data());
         setObjectifId(objSnap.docs[0].id);
       }
       setLoading(false);
     })();
   }, []);
 
-  const saveObjectif = async () => {
+  const handleSaveClick = () => {
+    const metier = objectif.type === 'travail' ? objectif.metier || '' : '';
+    const originalMetier = originalObjectif.type === 'travail' ? originalObjectif.metier || '' : '';
+    const needsRegeneration =
+      objectif.langue_cible !== originalObjectif.langue_cible ||
+      objectif.type !== originalObjectif.type ||
+      metier !== originalMetier;
+
+    if (needsRegeneration) {
+      setObjectifMsg(null);
+      setShowRegenConfirm(true);
+      return;
+    }
+
+    saveObjectif(false);
+  };
+
+  const saveObjectif = async (regenerate) => {
+    setShowRegenConfirm(false);
     setSavingObjectif(true);
     setObjectifMsg(null);
+
+    const metier = objectif.type === 'travail' ? objectif.metier || '' : '';
+
     try {
       await updateDoc(doc(db, 'objectifs', objectifId), {
         langue_cible: objectif.langue_cible,
         type: objectif.type,
-        metier: objectif.type === 'travail' ? objectif.metier || null : null,
+        metier: metier || null,
         niveau_depart: objectif.niveau_depart,
         date_echeance: objectif.date_echeance || null,
       });
-      setObjectifMsg('Objectif mis à jour.');
-    } catch {
+
+      if (regenerate) {
+        setObjectifMsg('Régénération du vocabulaire et des scénarios…');
+
+        const payload = { langue: objectif.langue_cible, type: objectif.type, niveau: objectif.niveau_depart, metier };
+
+        const [vocabRes, scenariosRes] = await Promise.all([
+          fetch('/api/generate-vocab', { method: 'POST', body: JSON.stringify(payload) }),
+          fetch('/api/generate-scenarios', { method: 'POST', body: JSON.stringify(payload) }),
+        ]);
+        const { vocab } = await vocabRes.json();
+        const { scenarios } = await scenariosRes.json();
+
+        const [oldMotsSnap, oldScenariosSnap] = await Promise.all([
+          getDocs(collection(db, 'objectifs', objectifId, 'mots')),
+          getDocs(collection(db, 'objectifs', objectifId, 'scenarios')),
+        ]);
+        await Promise.all([
+          ...oldMotsSnap.docs.map((d) => deleteDoc(d.ref)),
+          ...oldScenariosSnap.docs.map((d) => deleteDoc(d.ref)),
+        ]);
+
+        if (vocab?.length) {
+          await Promise.all(
+            vocab.map((w) =>
+              addDoc(collection(db, 'objectifs', objectifId, 'mots'), {
+                terme: w.terme,
+                traduction: w.traduction,
+                contexte_usage: w.contexte,
+                mastery: 'nouveau',
+                niveau_maitrise: 0,
+                prochaine_revision: null,
+                date_decouverte: serverTimestamp(),
+              })
+            )
+          );
+        }
+
+        if (scenarios?.length) {
+          await Promise.all(
+            scenarios.map((s) =>
+              addDoc(collection(db, 'objectifs', objectifId, 'scenarios'), {
+                titre: s.titre,
+                contexte: s.contexte,
+                complete: false,
+                messages: [],
+                createdAt: serverTimestamp(),
+              })
+            )
+          );
+        }
+
+        setOriginalObjectif({ ...objectif, metier });
+        setObjectifMsg('Objectif mis à jour — vocabulaire et scénarios régénérés pour ta nouvelle langue/objectif.');
+      } else {
+        setOriginalObjectif({ ...objectif, metier });
+        setObjectifMsg('Objectif mis à jour.');
+      }
+    } catch (err) {
+      console.error('saveObjectif error:', err);
       setObjectifMsg('La sauvegarde a échoué.');
     } finally {
       setSavingObjectif(false);
@@ -227,15 +321,41 @@ export default function ComptePage() {
             <p className="text-sm text-sageDark bg-sagePale px-4 py-2 rounded-xl mb-3">{objectifMsg}</p>
           )}
 
+          {showRegenConfirm && (
+            <div className="border border-coralPale bg-coralPale/40 rounded-2xl p-4 mb-3">
+              <p className="text-sm text-coralDark font-semibold mb-1.5">Confirmer le changement</p>
+              <p className="text-[13px] text-inkSoft leading-relaxed mb-3">
+                Changer la langue, le type d'objectif ou le métier va régénérer le vocabulaire et les
+                scénarios. Ta progression actuelle (mots appris, scénarios complétés) sera perdue.
+                Continuer ?
+              </p>
+              <div className="flex gap-2.5">
+                <button
+                  onClick={() => setShowRegenConfirm(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-line bg-white text-sm font-semibold text-inkSoft"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => saveObjectif(true)}
+                  className="flex-1 py-2.5 rounded-xl bg-coral text-white text-sm font-semibold"
+                >
+                  Confirmer et régénérer
+                </button>
+              </div>
+            </div>
+          )}
+
           <button
-            onClick={saveObjectif}
-            disabled={savingObjectif}
+            onClick={handleSaveClick}
+            disabled={savingObjectif || showRegenConfirm}
             className="w-full py-3.5 rounded-2xl bg-sageDark text-white font-semibold disabled:opacity-50"
           >
             {savingObjectif ? 'Sauvegarde…' : 'Enregistrer les modifications'}
           </button>
           <p className="text-xs text-inkSoft mt-2 leading-relaxed">
-            Note : changer la langue ou le type ne régénère pas automatiquement le vocabulaire déjà créé.
+            Note : changer la langue, le type d'objectif ou le métier régénère automatiquement le
+            vocabulaire et les scénarios (les anciens sont remplacés), après confirmation.
           </p>
         </div>
       )}
