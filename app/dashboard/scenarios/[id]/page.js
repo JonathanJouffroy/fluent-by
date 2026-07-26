@@ -131,7 +131,7 @@ function ChatScenarioContent() {
   }
 
   return (
-    <div className="fixed inset-0 max-w-[480px] mx-auto flex flex-col bg-bg">
+    <div className="fixed inset-0 z-50 max-w-[480px] mx-auto flex flex-col bg-bg">
       <div className="flex items-center gap-3 px-5 py-4 border-b border-line bg-white">
         <button onClick={() => router.push('/dashboard/scenarios')} className="text-xl px-1">
           ←
