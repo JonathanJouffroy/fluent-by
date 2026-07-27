@@ -28,6 +28,10 @@ function ChatScenarioContent() {
   const [listening, setListening] = useState(false);
   const [lastConfidence, setLastConfidence] = useState(null);
   const [voiceSupported, setVoiceSupported] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const [suggestedWords, setSuggestedWords] = useState([]);
+  const [extractingWords, setExtractingWords] = useState(false);
+  const [addedTermes, setAddedTermes] = useState(new Set());
   const started = useRef(false);
   const bodyRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -186,13 +190,109 @@ function ChatScenarioContent() {
       date: new Date().toISOString().slice(0, 10),
       createdAt: serverTimestamp(),
     }).catch((err) => console.error('activity log error:', err));
-    router.push('/dashboard/scenarios');
+
+    setShowSummary(true);
+    setExtractingWords(true);
+    try {
+      const res = await fetch('/api/extract-vocab', {
+        method: 'POST',
+        body: JSON.stringify({ langue: objectif.langue_cible, niveau: objectif.niveau_depart, messages }),
+      });
+      const data = await res.json();
+      setSuggestedWords(data.words || []);
+    } catch (err) {
+      console.error('extract-vocab fetch error:', err);
+      setSuggestedWords([]);
+    } finally {
+      setExtractingWords(false);
+    }
+  };
+
+  const addSuggestedWord = async (word) => {
+    try {
+      await addDoc(collection(db, 'objectifs', objectifId, 'mots'), {
+        terme: word.terme,
+        traduction: word.traduction,
+        contexte_usage: word.contexte,
+        mastery: 'nouveau',
+        niveau_maitrise: 0,
+        prochaine_revision: null,
+        date_decouverte: serverTimestamp(),
+      });
+      setAddedTermes((prev) => new Set(prev).add(word.terme));
+    } catch (err) {
+      console.error('addSuggestedWord error:', err);
+    }
   };
 
   if (loading || !objectif || !scenario) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="w-8 h-8 rounded-full border-4 border-sagePale border-t-sageDark animate-spin" />
+      </div>
+    );
+  }
+
+  if (showSummary) {
+    return (
+      <div className="fixed inset-0 z-50 max-w-[480px] mx-auto flex flex-col bg-bg">
+        <div className="flex-1 overflow-y-auto px-5 pt-8 pb-6">
+          <div className="w-14 h-14 rounded-full bg-sagePale flex items-center justify-center text-2xl mb-4">
+            ✓
+          </div>
+          <p className="font-display text-2xl mb-1.5">Scénario terminé !</p>
+          <p className="text-sm text-inkSoft leading-relaxed mb-6">{scenario.titre}</p>
+
+          <p className="text-xs font-semibold uppercase tracking-wide text-inkSoft mb-3">
+            Expressions à retenir de cet échange
+          </p>
+
+          {extractingWords ? (
+            <div className="flex items-center gap-3 text-sm text-inkSoft py-4">
+              <div className="w-5 h-5 rounded-full border-[3px] border-sagePale border-t-sageDark animate-spin" />
+              Analyse de la conversation…
+            </div>
+          ) : suggestedWords.length ? (
+            <div className="flex flex-col gap-2.5">
+              {suggestedWords.map((w, i) => {
+                const added = addedTermes.has(w.terme);
+                return (
+                  <div
+                    key={i}
+                    className="bg-white border border-line rounded-2xl p-4 flex items-center justify-between gap-3"
+                  >
+                    <div>
+                      <p className="font-display text-base">
+                        {w.terme} <span className="text-coralDark font-semibold text-sm">{w.traduction}</span>
+                      </p>
+                      <p className="text-[13px] text-inkSoft mt-0.5">{w.contexte}</p>
+                    </div>
+                    <button
+                      onClick={() => addSuggestedWord(w)}
+                      disabled={added}
+                      className={`shrink-0 text-xs font-semibold px-3 py-2 rounded-full ${
+                        added ? 'bg-sagePale text-sageDark' : 'bg-coral text-white'
+                      }`}
+                    >
+                      {added ? 'Ajouté ✓' : '+ Ajouter'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-inkSoft">Rien de particulier à suggérer cette fois.</p>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-line bg-white pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <button
+            onClick={() => router.push('/dashboard/scenarios')}
+            className="w-full py-4 rounded-2xl bg-sageDark text-white font-semibold"
+          >
+            Continuer
+          </button>
+        </div>
       </div>
     );
   }
