@@ -5,7 +5,7 @@ const LABELS = { voyage: 'Voyage', travail: 'Travail', personnel: 'Personnel' };
 
 export async function POST(request) {
   try {
-    const { langue, type, niveau, metier } = await request.json();
+    const { langue, type, niveau, metier, theme, excludeTerms } = await request.json();
 
     const contexte = metier
       ? `"${LABELS[type]}" — métier/secteur précis : ${metier}`
@@ -17,6 +17,10 @@ export async function POST(request) {
     const user = `Génère 8 mots ou expressions en ${langue}, utiles pour l'objectif ${contexte} (niveau ${niveau}). ${
       metier
         ? `Le vocabulaire doit être spécifique au métier de ${metier} (termes techniques du quotidien de ce métier, pas du vocabulaire professionnel générique).`
+        : ''
+    }${theme ? ` Concentre-toi précisément sur ce thème : "${theme}".` : ''}${
+      excludeTerms?.length
+        ? ` Ne propose PAS ces mots déjà connus par l'utilisateur : ${excludeTerms.join(', ')}.`
         : ''
     } Format JSON exact :
 [{"terme": "...", "traduction": "...", "contexte": "courte phrase d'exemple ou explication d'usage"}]`;
