@@ -31,10 +31,18 @@ export default function HomePage() {
   const user = useAuthUser();
   const [objectif, setObjectif] = useState(null);
   const [objectifId, setObjectifId] = useState(null);
+  const [allWords, setAllWords] = useState([]);
   const [dueWords, setDueWords] = useState([]);
   const [totalWords, setTotalWords] = useState(0);
   const [idx, setIdx] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [markError, setMarkError] = useState(null);
+
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [theme, setTheme] = useState('');
+  const [generatingMore, setGeneratingMore] = useState(false);
+  const [addError, setAddError] = useState(null);
+  const [addSuccess, setAddSuccess] = useState(null);
 
   const load = async () => {
     if (!user) return;
@@ -57,6 +65,7 @@ export default function HomePage() {
         query(collection(db, 'objectifs', objDoc.id, 'mots'), orderBy('date_decouverte', 'asc'))
       );
       const all = motsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setAllWords(all);
       setTotalWords(all.length);
 
       const due = all
@@ -83,8 +92,6 @@ export default function HomePage() {
     }
     load();
   }, [user]);
-
-  const [markError, setMarkError] = useState(null);
 
   const mark = async (known) => {
     const word = dueWords[idx];
@@ -120,6 +127,64 @@ export default function HomePage() {
     }
   };
 
+  const generateMoreWords = async () => {
+    if (generatingMore) return;
+    setGeneratingMore(true);
+    setAddError(null);
+    setAddSuccess(null);
+    try {
+      const res = await fetch('/api/generate-vocab', {
+        method: 'POST',
+        body: JSON.stringify({
+          langue: objectif.langue_cible,
+          type: objectif.type,
+          niveau: objectif.niveau_depart,
+          metier: objectif.metier || '',
+          theme: theme.trim(),
+          excludeTerms: allWords.map((w) => w.terme),
+        }),
+      });
+      const data = await res.json();
+      if (data.error || !data.vocab?.length) throw new Error(data.error || 'empty');
+
+      const created = await Promise.all(
+        data.vocab.map((w) =>
+          addDoc(collection(db, 'objectifs', objectifId, 'mots'), {
+            terme: w.terme,
+            traduction: w.traduction,
+            contexte_usage: w.contexte,
+            mastery: 'nouveau',
+            niveau_maitrise: 0,
+            prochaine_revision: null,
+            date_decouverte: serverTimestamp(),
+          })
+        )
+      );
+
+      const newWords = data.vocab.map((w, i) => ({
+        id: created[i].id,
+        terme: w.terme,
+        traduction: w.traduction,
+        contexte_usage: w.contexte,
+        mastery: 'nouveau',
+        niveau_maitrise: 0,
+        prochaine_revision: null,
+      }));
+
+      setAllWords((prev) => [...prev, ...newWords]);
+      setTotalWords((prev) => prev + newWords.length);
+      setDueWords((prev) => [...prev, ...newWords]);
+      setAddSuccess(`${newWords.length} nouveaux mots ajoutés !`);
+      setTheme('');
+      setShowAddForm(false);
+    } catch (err) {
+      console.error('generateMoreWords error:', err);
+      setAddError('La génération a échoué, réessaie.');
+    } finally {
+      setGeneratingMore(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
@@ -146,11 +211,11 @@ export default function HomePage() {
       )}
 
       {!dueWords.length ? (
-        <div className="bg-white border border-line rounded-2xl px-6 py-10 text-center">
+        <div className="bg-white border border-line rounded-2xl px-6 py-10 text-center mb-6">
           <p className="font-display text-xl mb-2">Tu es à jour !</p>
           <p className="text-sm text-inkSoft leading-relaxed">
             {totalWords
-              ? "Tous tes mots ont été révisés récemment. Reviens demain pour la prochaine série."
+              ? "Tous tes mots ont été révisés récemment. Reviens demain pour la prochaine série, ou ajoute une nouvelle liste ci-dessous."
               : "Aucun mot pour l'instant."}
           </p>
         </div>
@@ -198,7 +263,51 @@ export default function HomePage() {
           {markError && (
             <p className="text-sm text-coralDark bg-coralPale px-4 py-2 rounded-xl mb-2">{markError}</p>
           )}
+
+          <div className="h-px bg-line my-6" />
         </>
+      )}
+
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-inkSoft">
+          Vocabulaire · {totalWords} mot{totalWords > 1 ? 's' : ''} au total
+        </p>
+        <button
+          onClick={() => setShowAddForm((v) => !v)}
+          className="text-xs font-semibold text-coralDark bg-coralPale px-3 py-1.5 rounded-full whitespace-nowrap"
+        >
+          {showAddForm ? 'Annuler' : '+ Nouvelle liste'}
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div className="bg-white border border-line rounded-2xl p-4 mb-2">
+          <p className="text-[13px] text-inkSoft leading-relaxed mb-3">
+            8 nouveaux mots liés à ton objectif. Tu peux préciser un thème (optionnel) pour cibler la
+            liste, par exemple "transports", "vocabulaire médical", "small talk au bureau"…
+          </p>
+          <input
+            type="text"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
+            placeholder="Thème (optionnel)"
+            className="w-full px-4 py-3 rounded-2xl border border-line bg-white text-sm mb-3"
+          />
+          {addError && (
+            <p className="text-sm text-coralDark bg-coralPale px-4 py-2 rounded-xl mb-3">{addError}</p>
+          )}
+          <button
+            onClick={generateMoreWords}
+            disabled={generatingMore}
+            className="w-full py-3 rounded-2xl bg-coral text-white text-sm font-semibold disabled:opacity-50"
+          >
+            {generatingMore ? 'Génération…' : 'Générer 8 nouveaux mots'}
+          </button>
+        </div>
+      )}
+
+      {addSuccess && !showAddForm && (
+        <p className="text-sm text-sageDark bg-sagePale px-4 py-2 rounded-xl">{addSuccess}</p>
       )}
     </div>
   );
