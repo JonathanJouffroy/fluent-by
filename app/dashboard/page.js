@@ -115,12 +115,11 @@ export default function HomePage() {
         createdAt: serverTimestamp(),
       }).catch((err) => console.error('activity log error:', err));
 
-      if (idx < dueWords.length - 1) {
-        setIdx(idx + 1);
-      } else {
-        setDueWords((prev) => prev.filter((_, i) => i !== idx));
-        setIdx(0);
-      }
+      setDueWords((prev) => {
+        const next = prev.filter((_, i) => i !== idx);
+        setIdx((currentIdx) => (currentIdx >= next.length ? 0 : currentIdx));
+        return next;
+      });
     } catch (err) {
       console.error('mark() error:', err);
       setMarkError("La mise à jour a échoué. Vérifie ta connexion et réessaie.");
