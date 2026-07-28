@@ -159,11 +159,11 @@ export default function ProgressionPage() {
             {masteredWords.map((w, i) => (
               <div
                 key={i}
-                className="relative bg-sagePale rounded-xl px-3.5 py-3 pr-7 overflow-hidden"
+                className="relative bg-sagePale rounded-xl px-3.5 py-3 pr-7"
               >
                 <span className="absolute top-2 right-2.5 text-sageDark text-xs">✓</span>
-                <p className="font-display text-[15px] leading-tight truncate">{w.terme}</p>
-                <p className="text-[12px] text-sageDark font-semibold truncate mt-0.5">{w.traduction}</p>
+                <p className="font-display text-[15px] leading-snug break-words pr-1">{w.terme}</p>
+                <p className="text-[12px] text-sageDark font-semibold leading-snug break-words mt-0.5">{w.traduction}</p>
               </div>
             ))}
           </div>
