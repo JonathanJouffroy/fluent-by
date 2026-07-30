@@ -7,10 +7,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   collection,
-  query,
-  where,
-  orderBy,
-  limit,
   getDocs,
   doc,
   updateDoc,
@@ -21,6 +17,7 @@ import {
 import { updatePassword, signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase/client';
 import { useAuthUser } from '@/lib/firebase/useAuthUser';
+import { getActiveObjectif } from '@/lib/firebase/objectif';
 
 const LANGUES = ['Espagnol', 'Anglais', 'Italien', 'Allemand', 'Portugais', 'Japonais'];
 const TYPES = [
@@ -66,13 +63,12 @@ export default function ComptePage() {
       try {
         setEmail(user.email);
 
-        const objSnap = await getDocs(
-          query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
-        );
-        if (!objSnap.empty) {
-          setObjectif(objSnap.docs[0].data());
-          setOriginalObjectif(objSnap.docs[0].data());
-          setObjectifId(objSnap.docs[0].id);
+        const objData = await getActiveObjectif(user);
+        if (objData) {
+          const { id, ...rest } = objData;
+          setObjectif(rest);
+          setOriginalObjectif(rest);
+          setObjectifId(id);
         }
       } catch (err) {
         console.error('ComptePage load error:', err);
@@ -240,7 +236,12 @@ export default function ComptePage() {
 
       {objectif && (
         <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-wide text-inkSoft mb-3">Mon objectif</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-inkSoft">Mon objectif</p>
+            <Link href="/onboarding" className="text-xs font-semibold text-coralDark">
+              + Nouvel objectif
+            </Link>
+          </div>
 
           <div className="mb-4">
             <label className="block text-xs font-semibold uppercase tracking-wide text-sageDark mb-2">
