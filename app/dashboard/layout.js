@@ -30,6 +30,14 @@ export default async function DashboardLayout({ children }) {
     console.error('DashboardLayout preference read error:', err);
   }
 
+  // Ne garder que des champs sérialisables pour le composant client (pas l'objet Timestamp
+  // "createdAt" renvoyé par le SDK Admin, qui casserait le rendu Server → Client Component).
+  const objectifsForSwitcher = objectifs.map((o) => ({
+    id: o.id,
+    langue_cible: o.langue_cible,
+    type: o.type,
+  }));
+
   return (
     <div className="flex flex-col min-h-screen">
       <div className="flex items-center justify-between px-5 pt-6 pb-4">
@@ -37,7 +45,7 @@ export default async function DashboardLayout({ children }) {
           Fluent <span className="italic font-normal text-sageDark">by</span>
         </span>
         <div className="flex items-center gap-2">
-          <ObjectifSwitcher objectifs={objectifs} activeId={activeId} />
+          <ObjectifSwitcher objectifs={objectifsForSwitcher} activeId={activeId} />
           <Link
             href="/dashboard/compte"
             aria-label="Mon compte"
