@@ -56,12 +56,29 @@ export default function FichePage() {
     );
   }
 
+  const toReview = words.filter((w) => (w.niveau_maitrise || 0) < 1);
+  const mastered = words.filter((w) => (w.niveau_maitrise || 0) >= 1);
+  const todoScenarios = scenarios.filter((s) => !s.complete);
+  const doneScenarios = scenarios.filter((s) => s.complete);
+
+  const WordGrid = ({ list }) => (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+      {list.map((w, i) => (
+        <div key={i} className="flex items-baseline justify-between py-2 border-b border-line">
+          <span className="font-display text-[15px]">{w.terme}</span>
+          <span className="text-[13px] text-coralDark font-semibold ml-2 truncate">{w.traduction}</span>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="pt-2 pb-8">
       <style>{`
         @media print {
           .no-print { display: none !important; }
           body { background: white !important; }
+          .print-break { break-inside: avoid; }
         }
       `}</style>
 
@@ -80,7 +97,7 @@ export default function FichePage() {
         </button>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-5">
         <p className="font-display text-2xl mb-1">{objectif?.langue_cible}</p>
         <p className="text-sm text-inkSoft">
           {TYPE_LABELS[objectif?.type]}
@@ -88,34 +105,64 @@ export default function FichePage() {
         </p>
       </div>
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-sageDark mb-3">Vocabulaire clé</p>
-      <div className="mb-6">
-        {words.map((w, i) => (
-          <div
-            key={i}
-            className="flex items-baseline justify-between py-2.5 border-b border-line last:border-0"
-          >
-            <div>
-              <span className="font-display text-base">{w.terme}</span>
-              <span className="text-sm text-coralDark font-semibold ml-2">{w.traduction}</span>
-            </div>
-          </div>
-        ))}
-        {!words.length && <p className="text-sm text-inkSoft">Aucun mot pour l'instant.</p>}
-      </div>
+      {words.length + scenarios.length > 0 && (
+        <div className="no-print bg-sagePale rounded-2xl px-4 py-3 mb-6 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-sageDark font-semibold">
+          {toReview.length > 0 && <span>À réviser en priorité · {toReview.length}</span>}
+          {mastered.length > 0 && <span>Déjà maîtrisés · {mastered.length}</span>}
+          {todoScenarios.length > 0 && <span>Situations à faire · {todoScenarios.length}</span>}
+          {doneScenarios.length > 0 && <span>Situations faites · {doneScenarios.length}</span>}
+        </div>
+      )}
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-sageDark mb-3">
-        Situations préparées
-      </p>
-      <div>
-        {scenarios.map((s, i) => (
-          <div key={i} className="py-2.5 border-b border-line last:border-0">
-            <p className="font-display text-base mb-0.5">{s.titre}</p>
-            <p className="text-sm text-inkSoft">{s.contexte}</p>
-          </div>
-        ))}
-        {!scenarios.length && <p className="text-sm text-inkSoft">Aucun scénario pour l'instant.</p>}
-      </div>
+      {toReview.length > 0 && (
+        <div className="mb-6 print-break">
+          <p className="text-xs font-semibold uppercase tracking-wide text-coralDark mb-2">
+            À réviser en priorité · {toReview.length}
+          </p>
+          <WordGrid list={toReview} />
+        </div>
+      )}
+
+      {mastered.length > 0 && (
+        <div className="mb-6 print-break">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sageDark mb-2">
+            Déjà maîtrisés · {mastered.length}
+          </p>
+          <WordGrid list={mastered} />
+        </div>
+      )}
+
+      {!words.length && <p className="text-sm text-inkSoft mb-6">Aucun mot pour l'instant.</p>}
+
+      {todoScenarios.length > 0 && (
+        <div className="mb-6 print-break">
+          <p className="text-xs font-semibold uppercase tracking-wide text-coralDark mb-2">
+            Situations à faire · {todoScenarios.length}
+          </p>
+          {todoScenarios.map((s, i) => (
+            <div key={i} className="py-2.5 border-b border-line last:border-0">
+              <p className="font-display text-base mb-0.5">{s.titre}</p>
+              <p className="text-sm text-inkSoft">{s.contexte}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {doneScenarios.length > 0 && (
+        <div className="mb-6 print-break">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sageDark mb-2">
+            Situations faites · {doneScenarios.length}
+          </p>
+          {doneScenarios.map((s, i) => (
+            <div key={i} className="py-2.5 border-b border-line last:border-0">
+              <p className="font-display text-base mb-0.5">{s.titre}</p>
+              <p className="text-sm text-inkSoft">{s.contexte}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!scenarios.length && <p className="text-sm text-inkSoft">Aucun scénario pour l'instant.</p>}
 
       <p className="no-print text-xs text-inkSoft mt-6 leading-relaxed">
         Astuce : utilise "Exporter / Imprimer" puis choisis "Enregistrer en PDF" pour garder cette
