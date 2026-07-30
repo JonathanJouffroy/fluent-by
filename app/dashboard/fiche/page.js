@@ -62,11 +62,11 @@ export default function FichePage() {
   const doneScenarios = scenarios.filter((s) => s.complete);
 
   const WordGrid = ({ list }) => (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
       {list.map((w, i) => (
-        <div key={i} className="flex items-baseline justify-between py-2 border-b border-line">
-          <span className="font-display text-[15px]">{w.terme}</span>
-          <span className="text-[13px] text-coralDark font-semibold ml-2 truncate">{w.traduction}</span>
+        <div key={i} className="py-1.5 border-b border-line">
+          <p className="font-display text-[15px] leading-snug break-words">{w.terme}</p>
+          <p className="text-[13px] text-coralDark font-semibold leading-snug break-words">{w.traduction}</p>
         </div>
       ))}
     </div>
