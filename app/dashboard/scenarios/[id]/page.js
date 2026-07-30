@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { doc, getDoc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuthUser } from '@/lib/firebase/useAuthUser';
 import { toLangCode } from '@/lib/langCodes';
+import { getActiveObjectif } from '@/lib/firebase/objectif';
 
 function ChatScenarioContent() {
   const { id } = useParams();
@@ -32,6 +32,7 @@ function ChatScenarioContent() {
   const [suggestedWords, setSuggestedWords] = useState([]);
   const [extractingWords, setExtractingWords] = useState(false);
   const [addedTermes, setAddedTermes] = useState(new Set());
+  const [resumeMode, setResumeMode] = useState(false);
   const started = useRef(false);
   const bodyRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -52,10 +53,8 @@ function ChatScenarioContent() {
       try {
         let objId = objectifId;
         if (!objId) {
-          const objSnap = await getDocs(
-            query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
-          );
-          if (!objSnap.empty) objId = objSnap.docs[0].id;
+          const activeObj = await getActiveObjectif(user);
+          objId = activeObj?.id || null;
           setObjectifId(objId);
         }
         if (!objId) return;
@@ -304,7 +303,14 @@ function ChatScenarioContent() {
           ←
         </button>
         <div>
-          <h2 className="font-display text-[17px] font-medium">{scenario.titre}</h2>
+          <h2 className="font-display text-[17px] font-medium flex items-center gap-2">
+            {scenario.titre}
+            {scenario.complete && (
+              <span className="text-[10px] bg-sagePale text-sageDark px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide">
+                Terminé
+              </span>
+            )}
+          </h2>
           <p className="text-xs text-inkSoft">
             {objectif.langue_cible} · {scenario.contexte}
           </p>
@@ -350,50 +356,66 @@ function ChatScenarioContent() {
 
       {error && <div className="mx-4 mb-2 text-sm text-coralDark bg-coralPale px-3.5 py-2 rounded-xl">{error}</div>}
 
-      {!scenario.complete && (
-        <button
-          onClick={finishScenario}
-          className="mx-4 mb-3.5 py-2.5 rounded-xl bg-sagePale text-sageDark text-[13px] font-semibold text-center"
-        >
-          Terminer ce scénario
-        </button>
-      )}
-
-      {lastConfidence !== null && (
-        <p className="mx-4 mb-1 text-[11px] text-inkSoft">
-          Clarté de la reconnaissance vocale : {Math.round(lastConfidence * 100)}%
-        </p>
-      )}
-
-      <div className="flex gap-2.5 px-4 py-3.5 border-t border-line bg-white pb-[calc(0.875rem+env(safe-area-inset-bottom))]">
-        {voiceSupported && (
+      {scenario.complete && !resumeMode ? (
+        <div className="px-4 py-4 border-t border-line bg-white pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <p className="text-center text-[13px] text-inkSoft mb-3">
+            📖 Tu consultes l'historique de cette conversation.
+          </p>
           <button
-            onClick={listening ? stopListening : startListening}
-            className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${
-              listening ? 'bg-coral text-white animate-pulse' : 'bg-sagePale text-sageDark'
-            }`}
+            onClick={() => setResumeMode(true)}
+            className="w-full py-3 rounded-2xl border border-line bg-white text-sm font-semibold text-inkSoft"
           >
-            🎤
+            Reprendre la conversation
           </button>
-        )}
-        <input
-          placeholder={`Réponds en ${objectif.langue_cible}…`}
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            setLastConfidence(null);
-          }}
-          onKeyDown={(e) => e.key === 'Enter' && send()}
-          className="flex-1 border border-line rounded-full px-4.5 py-3 text-[15px]"
-        />
-        <button
-          onClick={send}
-          disabled={thinking || !input.trim()}
-          className="w-11 h-11 rounded-full bg-coral text-white flex items-center justify-center shrink-0 disabled:bg-[#D8D0BE]"
-        >
-          ↑
-        </button>
-      </div>
+        </div>
+      ) : (
+        <>
+          {!scenario.complete && (
+            <button
+              onClick={finishScenario}
+              className="mx-4 mb-3.5 py-2.5 rounded-xl bg-sagePale text-sageDark text-[13px] font-semibold text-center"
+            >
+              Terminer ce scénario
+            </button>
+          )}
+
+          {lastConfidence !== null && (
+            <p className="mx-4 mb-1 text-[11px] text-inkSoft">
+              Clarté de la reconnaissance vocale : {Math.round(lastConfidence * 100)}%
+            </p>
+          )}
+
+          <div className="flex gap-2.5 px-4 py-3.5 border-t border-line bg-white pb-[calc(0.875rem+env(safe-area-inset-bottom))]">
+            {voiceSupported && (
+              <button
+                onClick={listening ? stopListening : startListening}
+                className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${
+                  listening ? 'bg-coral text-white animate-pulse' : 'bg-sagePale text-sageDark'
+                }`}
+              >
+                🎤
+              </button>
+            )}
+            <input
+              placeholder={`Réponds en ${objectif.langue_cible}…`}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setLastConfidence(null);
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && send()}
+              className="flex-1 border border-line rounded-full px-4.5 py-3 text-[15px]"
+            />
+            <button
+              onClick={send}
+              disabled={thinking || !input.trim()}
+              className="w-11 h-11 rounded-full bg-coral text-white flex items-center justify-center shrink-0 disabled:bg-[#D8D0BE]"
+            >
+              ↑
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
