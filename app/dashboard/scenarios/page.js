@@ -4,9 +4,10 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { collection, query, where, orderBy, limit, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuthUser } from '@/lib/firebase/useAuthUser';
+import { getActiveObjectif } from '@/lib/firebase/objectif';
 
 export default function ScenariosPage() {
   const user = useAuthUser();
@@ -29,13 +30,11 @@ export default function ScenariosPage() {
 
     (async () => {
       try {
-        const objSnap = await getDocs(
-          query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
-        );
-        if (objSnap.empty) return;
+        const objData = await getActiveObjectif(user);
+        if (!objData) return;
 
-        const objId = objSnap.docs[0].id;
-        setObjectif(objSnap.docs[0].data());
+        const { id: objId, ...rest } = objData;
+        setObjectif(rest);
         setObjectifId(objId);
 
         const scenSnap = await getDocs(
