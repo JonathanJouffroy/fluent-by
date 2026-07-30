@@ -54,6 +54,9 @@ export default function ProgressionPage() {
   const [loading, setLoading] = useState(true);
   const [showWords, setShowWords] = useState(false);
   const [showScenarios, setShowScenarios] = useState(false);
+  const [wordSearch, setWordSearch] = useState('');
+  const [wordVisibleCount, setWordVisibleCount] = useState(12);
+  const [scenarioVisibleCount, setScenarioVisibleCount] = useState(8);
 
   useEffect(() => {
     if (user === undefined) return;
@@ -121,8 +124,31 @@ export default function ProgressionPage() {
   const activeDates = new Set(activity.filter((a) => last7Dates.has(a.date)).map((a) => a.date));
   const activeDaysCount = activeDates.size;
 
-  const masteredWords = words.filter((w) => (w.niveau_maitrise || 0) >= 1);
+  const toMillis = (ts) => {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (ts.seconds) return ts.seconds * 1000;
+    return 0;
+  };
+
+  const masteredWords = words
+    .filter((w) => (w.niveau_maitrise || 0) >= 1)
+    .sort((a, b) => toMillis(b.date_decouverte) - toMillis(a.date_decouverte));
+
+  const filteredMasteredWords = wordSearch.trim()
+    ? masteredWords.filter(
+        (w) =>
+          w.terme?.toLowerCase().includes(wordSearch.trim().toLowerCase()) ||
+          w.traduction?.toLowerCase().includes(wordSearch.trim().toLowerCase())
+      )
+    : masteredWords;
+
+  const visibleMasteredWords = wordSearch.trim()
+    ? filteredMasteredWords
+    : filteredMasteredWords.slice(0, wordVisibleCount);
+
   const completedScenarios = scenarios.filter((s) => s.complete);
+  const visibleCompletedScenarios = completedScenarios.slice(0, scenarioVisibleCount);
 
   return (
     <div className="pt-2">
@@ -152,17 +178,44 @@ export default function ProgressionPage() {
         )}
 
         {showWords && (
-          <div className="mt-4 pt-4 border-t border-line grid grid-cols-2 gap-2.5">
-            {masteredWords.map((w, i) => (
-              <div
-                key={i}
-                className="relative bg-sagePale rounded-xl px-3.5 py-3 pr-7"
-              >
-                <span className="absolute top-2 right-2.5 text-sageDark text-xs">✓</span>
-                <p className="font-display text-[15px] leading-snug break-words pr-1">{w.terme}</p>
-                <p className="text-[12px] text-sageDark font-semibold leading-snug break-words mt-0.5">{w.traduction}</p>
-              </div>
-            ))}
+          <div className="mt-4 pt-4 border-t border-line">
+            {masteredWords.length > 8 && (
+              <input
+                type="text"
+                value={wordSearch}
+                onChange={(e) => setWordSearch(e.target.value)}
+                placeholder="Rechercher un mot…"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-line bg-white text-sm mb-3"
+              />
+            )}
+
+            {filteredMasteredWords.length === 0 ? (
+              <p className="text-sm text-inkSoft">Aucun mot ne correspond à "{wordSearch}".</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {visibleMasteredWords.map((w, i) => (
+                    <div key={i} className="relative bg-sagePale rounded-xl px-3.5 py-3 pr-7">
+                      <span className="absolute top-2 right-2.5 text-sageDark text-xs">✓</span>
+                      <p className="font-display text-[15px] leading-snug break-words pr-1">{w.terme}</p>
+                      <p className="text-[12px] text-sageDark font-semibold leading-snug break-words mt-0.5">
+                        {w.traduction}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {!wordSearch.trim() && filteredMasteredWords.length > wordVisibleCount && (
+                  <button
+                    onClick={() => setWordVisibleCount((v) => v + 12)}
+                    className="w-full mt-3 py-2.5 rounded-xl border border-line text-xs font-semibold text-sageDark"
+                  >
+                    Voir {Math.min(12, filteredMasteredWords.length - wordVisibleCount)} de plus (
+                    {filteredMasteredWords.length - wordVisibleCount} restants)
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -192,11 +245,11 @@ export default function ProgressionPage() {
 
         {showScenarios && (
           <div className="mt-4 pt-4 border-t border-line flex flex-col">
-            {completedScenarios.map((s, i) => (
+            {visibleCompletedScenarios.map((s, i) => (
               <div
                 key={i}
                 className={`flex items-center gap-3 py-2.5 ${
-                  i !== completedScenarios.length - 1 ? 'border-b border-line' : ''
+                  i !== visibleCompletedScenarios.length - 1 ? 'border-b border-line' : ''
                 }`}
               >
                 <span className="w-6 h-6 rounded-full bg-sageDark text-white text-[11px] flex items-center justify-center shrink-0">
@@ -205,6 +258,15 @@ export default function ProgressionPage() {
                 <p className="text-sm">{s.titre}</p>
               </div>
             ))}
+            {completedScenarios.length > scenarioVisibleCount && (
+              <button
+                onClick={() => setScenarioVisibleCount((v) => v + 8)}
+                className="w-full mt-3 py-2.5 rounded-xl border border-line text-xs font-semibold text-sageDark"
+              >
+                Voir {Math.min(8, completedScenarios.length - scenarioVisibleCount)} de plus (
+                {completedScenarios.length - scenarioVisibleCount} restants)
+              </button>
+            )}
           </div>
         )}
       </div>
