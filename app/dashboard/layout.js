@@ -3,21 +3,32 @@ import Link from 'next/link';
 import { getSessionUser } from '@/lib/firebase/session';
 import { adminDb } from '@/lib/firebase/admin';
 import BottomNav from '@/components/BottomNav';
+import ObjectifSwitcher from '@/components/ObjectifSwitcher';
 
 export default async function DashboardLayout({ children }) {
   const user = await getSessionUser();
   if (!user) redirect('/login');
 
-  const snapshot = await adminDb()
+  const allSnapshot = await adminDb()
     .collection('objectifs')
     .where('uid', '==', user.uid)
     .orderBy('createdAt', 'desc')
-    .limit(1)
     .get();
 
-  if (snapshot.empty) redirect('/onboarding');
+  if (allSnapshot.empty) redirect('/onboarding');
 
-  const objectif = snapshot.docs[0].data();
+  const objectifs = allSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  let activeId = objectifs[0].id; // repli par défaut : le plus récent
+  try {
+    const prefSnap = await adminDb().collection('users').doc(user.uid).get();
+    const preferredId = prefSnap.exists ? prefSnap.data().activeObjectifId : null;
+    if (preferredId && objectifs.some((o) => o.id === preferredId)) {
+      activeId = preferredId;
+    }
+  } catch (err) {
+    console.error('DashboardLayout preference read error:', err);
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -26,9 +37,7 @@ export default async function DashboardLayout({ children }) {
           Fluent <span className="italic font-normal text-sageDark">by</span>
         </span>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-sageDark bg-sagePale px-3 py-1.5 rounded-full">
-            {objectif.langue_cible}
-          </span>
+          <ObjectifSwitcher objectifs={objectifs} activeId={activeId} />
           <Link
             href="/dashboard/compte"
             aria-label="Mon compte"
