@@ -3,9 +3,10 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuthUser } from '@/lib/firebase/useAuthUser';
+import { getActiveObjectif } from '@/lib/firebase/objectif';
 
 function daysLeft(dateStr) {
   if (!dateStr) return null;
@@ -63,23 +64,19 @@ export default function ProgressionPage() {
 
     (async () => {
       try {
-        const objSnap = await getDocs(
-          query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
-        );
-        if (objSnap.empty) return;
+        const objData = await getActiveObjectif(user);
+        if (!objData) return;
 
-        const objDoc = objSnap.docs[0];
-        setObjectif(objDoc.data());
+        const { id: objId, ...rest } = objData;
+        setObjectif(rest);
 
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 56); // 8 semaines glissantes
 
         const [motsSnap, scenSnap, activitySnap] = await Promise.all([
-          getDocs(collection(db, 'objectifs', objDoc.id, 'mots')),
-          getDocs(collection(db, 'objectifs', objDoc.id, 'scenarios')),
-          getDocs(
-            query(collection(db, 'objectifs', objDoc.id, 'activity'), where('date', '>=', isoDate(cutoff)))
-          ),
+          getDocs(collection(db, 'objectifs', objId, 'mots')),
+          getDocs(collection(db, 'objectifs', objId, 'scenarios')),
+          getDocs(query(collection(db, 'objectifs', objId, 'activity'), where('date', '>=', isoDate(cutoff)))),
         ]);
         setWords(motsSnap.docs.map((d) => d.data()));
         setScenarios(scenSnap.docs.map((d) => d.data()));
