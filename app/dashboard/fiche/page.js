@@ -4,9 +4,10 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuthUser } from '@/lib/firebase/useAuthUser';
+import { getActiveObjectif } from '@/lib/firebase/objectif';
 
 const TYPE_LABELS = { voyage: 'Voyage', travail: 'Travail', personnel: 'Personnel' };
 
@@ -27,17 +28,15 @@ export default function FichePage() {
 
     (async () => {
       try {
-        const objSnap = await getDocs(
-          query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
-        );
-        if (objSnap.empty) return;
+        const objData = await getActiveObjectif(user);
+        if (!objData) return;
 
-        const objDoc = objSnap.docs[0];
-        setObjectif(objDoc.data());
+        const { id: objId, ...rest } = objData;
+        setObjectif(rest);
 
         const [motsSnap, scenSnap] = await Promise.all([
-          getDocs(query(collection(db, 'objectifs', objDoc.id, 'mots'), orderBy('date_decouverte', 'asc'))),
-          getDocs(collection(db, 'objectifs', objDoc.id, 'scenarios')),
+          getDocs(query(collection(db, 'objectifs', objId, 'mots'), orderBy('date_decouverte', 'asc'))),
+          getDocs(collection(db, 'objectifs', objId, 'scenarios')),
         ]);
         setWords(motsSnap.docs.map((d) => d.data()));
         setScenarios(scenSnap.docs.map((d) => d.data()));
