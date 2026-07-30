@@ -3,12 +3,11 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   collection,
   query,
-  where,
   orderBy,
-  limit,
   getDocs,
   doc,
   updateDoc,
@@ -17,12 +16,34 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuthUser } from '@/lib/firebase/useAuthUser';
+import { getActiveObjectif } from '@/lib/firebase/objectif';
 import { computeNextReview, isDue } from '@/lib/spacedRepetition';
 
 function daysLeft(dateStr) {
   if (!dateStr) return null;
   const diff = new Date(dateStr) - new Date();
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+}
+
+function todayKey(objectifId) {
+  return `fluentby_daily_${objectifId}_${new Date().toISOString().slice(0, 10)}`;
+}
+
+/** Lit (ou initialise) le nombre de mots dus au début de la session du jour, persisté en local. */
+function getOrInitDailyGoal(objectifId, currentDueCount) {
+  if (typeof window === 'undefined') return currentDueCount;
+  const key = todayKey(objectifId);
+  const stored = window.localStorage.getItem(key);
+  if (stored !== null) return Math.max(parseInt(stored, 10), currentDueCount);
+  window.localStorage.setItem(key, String(currentDueCount));
+  return currentDueCount;
+}
+
+function bumpDailyGoal(objectifId, extra) {
+  if (typeof window === 'undefined') return;
+  const key = todayKey(objectifId);
+  const current = parseInt(window.localStorage.getItem(key) || '0', 10);
+  window.localStorage.setItem(key, String(current + extra));
 }
 
 const TYPE_LABELS = { voyage: 'Voyage', travail: 'Travail', personnel: 'Personnel' };
@@ -43,26 +64,21 @@ export default function HomePage() {
   const [generatingMore, setGeneratingMore] = useState(false);
   const [addError, setAddError] = useState(null);
   const [addSuccess, setAddSuccess] = useState(null);
+  const [dailyGoal, setDailyGoal] = useState(0);
 
   const load = async () => {
     if (!user) return;
 
     try {
-      const objQuery = query(
-        collection(db, 'objectifs'),
-        where('uid', '==', user.uid),
-        orderBy('createdAt', 'desc'),
-        limit(1)
-      );
-      const objSnap = await getDocs(objQuery);
-      if (objSnap.empty) return;
+      const objDocData = await getActiveObjectif(user);
+      if (!objDocData) return;
 
-      const objDoc = objSnap.docs[0];
-      setObjectif(objDoc.data());
-      setObjectifId(objDoc.id);
+      const { id: objId, ...objData } = objDocData;
+      setObjectif(objData);
+      setObjectifId(objId);
 
       const motsSnap = await getDocs(
-        query(collection(db, 'objectifs', objDoc.id, 'mots'), orderBy('date_decouverte', 'asc'))
+        query(collection(db, 'objectifs', objId, 'mots'), orderBy('date_decouverte', 'asc'))
       );
       const all = motsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setAllWords(all);
@@ -77,6 +93,7 @@ export default function HomePage() {
         });
       setDueWords(due);
       setIdx(0);
+      setDailyGoal(getOrInitDailyGoal(objId, due.length));
     } catch (err) {
       console.error('HomePage load error:', err);
     } finally {
@@ -173,6 +190,8 @@ export default function HomePage() {
       setAllWords((prev) => [...prev, ...newWords]);
       setTotalWords((prev) => prev + newWords.length);
       setDueWords((prev) => [...prev, ...newWords]);
+      setDailyGoal((prev) => prev + newWords.length);
+      bumpDailyGoal(objectifId, newWords.length);
       setAddSuccess(`${newWords.length} nouveaux mots ajoutés !`);
       setTheme('');
       setShowAddForm(false);
@@ -209,14 +228,49 @@ export default function HomePage() {
         </div>
       )}
 
+      {dailyGoal > 0 && (
+        <div className="bg-white border border-line rounded-2xl px-5 py-4 mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[13px] text-inkSoft">Aujourd'hui</p>
+            <p className="text-[13px] font-semibold text-ink">
+              {Math.min(dailyGoal - dueWords.length, dailyGoal)}/{dailyGoal} mots
+            </p>
+          </div>
+          <div className="h-2 bg-sagePale rounded-full overflow-hidden">
+            <div
+              className="h-full bg-coral rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(100, ((dailyGoal - dueWords.length) / dailyGoal) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {!dueWords.length ? (
-        <div className="bg-white border border-line rounded-2xl px-6 py-10 text-center mb-6">
+        <div className="bg-white border border-line rounded-2xl px-6 py-9 text-center mb-6">
+          <div className="w-12 h-12 rounded-full bg-sagePale flex items-center justify-center text-xl mx-auto mb-3">
+            ✓
+          </div>
           <p className="font-display text-xl mb-2">Tu es à jour !</p>
-          <p className="text-sm text-inkSoft leading-relaxed">
+          <p className="text-sm text-inkSoft leading-relaxed mb-5">
             {totalWords
-              ? "Tous tes mots ont été révisés récemment. Reviens demain pour la prochaine série, ou ajoute une nouvelle liste ci-dessous."
+              ? 'Tous tes mots ont été révisés récemment. Reviens demain pour la prochaine série, ou continue avec une action ci-dessous.'
               : "Aucun mot pour l'instant."}
           </p>
+          <div className="flex flex-col gap-2.5">
+            <button
+              onClick={generateMoreWords}
+              disabled={generatingMore}
+              className="w-full py-3 rounded-2xl bg-coral text-white text-sm font-semibold disabled:opacity-50"
+            >
+              {generatingMore ? 'Génération…' : '+ Nouvelle liste de mots'}
+            </button>
+            <Link
+              href="/dashboard/scenarios"
+              className="w-full py-3 rounded-2xl border border-line bg-white text-sm font-semibold text-inkSoft"
+            >
+              Faire un scénario de conversation
+            </Link>
+          </div>
         </div>
       ) : (
         <>
@@ -225,7 +279,10 @@ export default function HomePage() {
           </p>
 
           <div className="relative h-[250px] mb-4">
-            <div className="absolute inset-0 bg-white rounded-xl2 p-6 flex flex-col justify-between border border-line shadow-[0_10px_30px_-12px_rgba(44,54,48,0.18)]">
+            <div
+              key={idx}
+              className="card-enter absolute inset-0 bg-white rounded-xl2 p-6 flex flex-col justify-between border border-line shadow-[0_10px_30px_-12px_rgba(44,54,48,0.18)]"
+            >
               <div>
                 {(dueWords[idx].niveau_maitrise || 0) >= 1 && (
                   <span className="text-[11px] bg-sagePale text-sageDark px-2.5 py-1 rounded-full font-semibold">
