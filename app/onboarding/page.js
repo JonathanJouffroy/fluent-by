@@ -2,255 +2,222 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useAuthUser } from '@/lib/firebase/useAuthUser';
+import { setActiveObjectif } from '@/lib/firebase/objectif';
 
-function daysLeft(dateStr) {
-  if (!dateStr) return null;
-  const diff = new Date(dateStr) - new Date();
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-}
+const LANGUES = ['Espagnol', 'Anglais', 'Italien', 'Allemand', 'Portugais', 'Japonais'];
+const TYPES = [
+  { id: 'voyage', label: 'Voyage' },
+  { id: 'travail', label: 'Travail' },
+  { id: 'personnel', label: 'Personnel' },
+];
+const NIVEAUX = [
+  { id: 'debutant', label: 'Débutant' },
+  { id: 'intermediaire', label: 'Intermédiaire' },
+  { id: 'avance', label: 'Avancé' },
+];
 
-function isoDate(d) {
-  return d.toISOString().slice(0, 10);
-}
-
-/** Lundi de la semaine contenant cette date, au format YYYY-MM-DD. */
-function weekKey(dateStr) {
-  const d = new Date(dateStr);
-  const day = (d.getDay() + 6) % 7; // 0 = lundi
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - day);
-  return isoDate(monday);
-}
-
-function formatWeekLabel(mondayStr) {
-  const d = new Date(mondayStr);
-  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-}
-
-/** Construit les N dernières semaines (clé lundi) avec un compteur d'activité initialisé à 0. */
-function buildLastWeeks(count) {
-  const weeks = [];
-  const today = new Date();
-  for (let i = count - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i * 7);
-    const key = weekKey(isoDate(d));
-    if (!weeks.find((w) => w.key === key)) weeks.push({ key, count: 0 });
-  }
-  return weeks;
-}
-
-export default function ProgressionPage() {
+export default function OnboardingPage() {
+  const router = useRouter();
   const user = useAuthUser();
-  const [objectif, setObjectif] = useState(null);
-  const [words, setWords] = useState([]);
-  const [scenarios, setScenarios] = useState([]);
-  const [activity, setActivity] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showWords, setShowWords] = useState(false);
-  const [showScenarios, setShowScenarios] = useState(false);
 
-  useEffect(() => {
-    if (user === undefined) return;
-    if (user === null) {
-      setLoading(false);
-      return;
-    }
+  const [langue, setLangue] = useState('Espagnol');
+  const [type, setType] = useState('voyage');
+  const [date, setDate] = useState('');
+  const [niveau, setNiveau] = useState('debutant');
+  const [metier, setMetier] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-    (async () => {
-      try {
-        const objSnap = await getDocs(
-          query(collection(db, 'objectifs'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(1))
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (!user) throw new Error('not authenticated');
+
+      const payload = { langue, type, niveau, metier: type === 'travail' ? metier.trim() : '' };
+
+      const [vocabRes, scenariosRes] = await Promise.all([
+        fetch('/api/generate-vocab', { method: 'POST', body: JSON.stringify(payload) }),
+        fetch('/api/generate-scenarios', { method: 'POST', body: JSON.stringify(payload) }),
+      ]);
+      const { vocab } = await vocabRes.json();
+      const { scenarios } = await scenariosRes.json();
+
+      const objectifRef = await addDoc(collection(db, 'objectifs'), {
+        uid: user.uid,
+        langue_cible: langue,
+        type,
+        metier: payload.metier || null,
+        date_echeance: date || null,
+        niveau_depart: niveau,
+        createdAt: serverTimestamp(),
+      });
+
+      if (vocab?.length) {
+        await Promise.all(
+          vocab.map((w) =>
+            addDoc(collection(db, 'objectifs', objectifRef.id, 'mots'), {
+              terme: w.terme,
+              traduction: w.traduction,
+              contexte_usage: w.contexte,
+              mastery: 'nouveau',
+              niveau_maitrise: 0,
+              prochaine_revision: null,
+              date_decouverte: serverTimestamp(),
+            })
+          )
         );
-        if (objSnap.empty) return;
-
-        const objDoc = objSnap.docs[0];
-        setObjectif(objDoc.data());
-
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - 56); // 8 semaines glissantes
-
-        const [motsSnap, scenSnap, activitySnap] = await Promise.all([
-          getDocs(collection(db, 'objectifs', objDoc.id, 'mots')),
-          getDocs(collection(db, 'objectifs', objDoc.id, 'scenarios')),
-          getDocs(
-            query(collection(db, 'objectifs', objDoc.id, 'activity'), where('date', '>=', isoDate(cutoff)))
-          ),
-        ]);
-        setWords(motsSnap.docs.map((d) => d.data()));
-        setScenarios(scenSnap.docs.map((d) => d.data()));
-        setActivity(activitySnap.docs.map((d) => d.data()));
-      } catch (err) {
-        console.error('ProgressionPage load error:', err);
-      } finally {
-        setLoading(false);
       }
-    })();
-  }, [user]);
+
+      if (scenarios?.length) {
+        await Promise.all(
+          scenarios.map((s) =>
+            addDoc(collection(db, 'objectifs', objectifRef.id, 'scenarios'), {
+              titre: s.titre,
+              contexte: s.contexte,
+              complete: false,
+              messages: [],
+              createdAt: serverTimestamp(),
+            })
+          )
+        );
+      }
+
+      // Ne doit jamais bloquer la création de l'objectif si ça échoue (ex: règles Firestore
+      // pas encore déployées pour la collection users/) — l'objectif est déjà créé à ce stade.
+      try {
+        await setActiveObjectif(user, objectifRef.id);
+      } catch (prefError) {
+        console.error('setActiveObjectif error (non bloquant):', prefError);
+      }
+
+      router.push('/dashboard');
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+      setError('La génération a échoué, réessaie dans un instant.');
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 rounded-full border-4 border-sagePale border-t-sageDark animate-spin" />
+      <div className="min-h-screen min-h-dvh flex flex-col items-center justify-center gap-4 px-5">
+        <div className="w-9 h-9 rounded-full border-4 border-sagePale border-t-sageDark animate-spin" />
+        <p className="font-display text-lg text-sageDark">On prépare ton parcours…</p>
       </div>
     );
   }
 
-  const learned = words.filter((w) => (w.niveau_maitrise || 0) >= 1).length;
-  const done = scenarios.filter((s) => s.complete).length;
-  const remaining = objectif?.date_echeance ? daysLeft(objectif.date_echeance) : null;
-
-  const weeks = buildLastWeeks(6);
-  activity
-    .filter((a) => a.type === 'mot_revise')
-    .forEach((a) => {
-      const key = weekKey(a.date);
-      const w = weeks.find((w) => w.key === key);
-      if (w) w.count += 1;
-    });
-  const maxCount = Math.max(1, ...weeks.map((w) => w.count));
-
-  const today = new Date();
-  const last7Dates = new Set();
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    last7Dates.add(isoDate(d));
-  }
-  const activeDates = new Set(activity.filter((a) => last7Dates.has(a.date)).map((a) => a.date));
-  const activeDaysCount = activeDates.size;
-
-  const masteredWords = words.filter((w) => (w.niveau_maitrise || 0) >= 1);
-  const completedScenarios = scenarios.filter((s) => s.complete);
-
   return (
-    <div className="pt-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-inkSoft mb-3">Ta progression</p>
+    <div className="px-5 pt-8 pb-10 flex flex-col min-h-screen min-h-dvh">
+      <span className="font-display text-xl font-semibold text-ink mb-6">
+        Fluent <span className="italic font-normal text-sageDark">by</span>
+      </span>
 
-      <div className="bg-white border border-line rounded-2xl p-5 mb-3.5">
-        <p className="text-[13px] text-inkSoft mb-1.5">Mots maîtrisés</p>
-        <p className="font-display text-3xl mb-2.5">
-          {learned}
-          <span className="text-base text-inkSoft"> / {words.length}</span>
-        </p>
-        <div className="h-2 bg-sagePale rounded-full overflow-hidden mb-3">
-          <div
-            className="h-full bg-sageDark rounded-full transition-all"
-            style={{ width: `${words.length ? (learned / words.length) * 100 : 0}%` }}
-          />
-        </div>
+      <h1 className="font-display text-3xl mb-2 leading-tight">
+        Un objectif.
+        <br />
+        Pas un programme.
+      </h1>
+      <p className="text-inkSoft text-sm mb-8 leading-relaxed">
+        Dis-nous ce que tu prépares, on s'occupe du vocabulaire et des mises en situation.
+      </p>
 
-        {learned > 0 && (
-          <button
-            onClick={() => setShowWords((v) => !v)}
-            className="text-xs font-semibold text-sageDark flex items-center gap-1"
-          >
-            {showWords ? 'Masquer les mots' : 'Voir les mots maîtrisés'}
-            <span className={`inline-block transition-transform ${showWords ? 'rotate-180' : ''}`}>⌄</span>
-          </button>
-        )}
+      {error && <p className="text-sm text-coralDark bg-coralPale px-4 py-2 rounded-xl mb-4">{error}</p>}
 
-        {showWords && (
-          <div className="mt-4 pt-4 border-t border-line grid grid-cols-2 gap-2.5">
-            {masteredWords.map((w, i) => (
-              <div
-                key={i}
-                className="relative bg-sagePale rounded-xl px-3.5 py-3 pr-7 overflow-hidden"
-              >
-                <span className="absolute top-2 right-2.5 text-sageDark text-xs">✓</span>
-                <p className="font-display text-[15px] leading-tight truncate">{w.terme}</p>
-                <p className="text-[12px] text-sageDark font-semibold truncate mt-0.5">{w.traduction}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white border border-line rounded-2xl p-5 mb-3.5">
-        <p className="text-[13px] text-inkSoft mb-1.5">Scénarios complétés</p>
-        <p className="font-display text-3xl mb-2.5">
-          {done}
-          <span className="text-base text-inkSoft"> / {scenarios.length}</span>
-        </p>
-        <div className="h-2 bg-sagePale rounded-full overflow-hidden mb-3">
-          <div
-            className="h-full bg-sageDark rounded-full transition-all"
-            style={{ width: `${scenarios.length ? (done / scenarios.length) * 100 : 0}%` }}
-          />
-        </div>
-
-        {done > 0 && (
-          <button
-            onClick={() => setShowScenarios((v) => !v)}
-            className="text-xs font-semibold text-sageDark flex items-center gap-1"
-          >
-            {showScenarios ? 'Masquer les scénarios' : 'Voir les scénarios complétés'}
-            <span className={`inline-block transition-transform ${showScenarios ? 'rotate-180' : ''}`}>⌄</span>
-          </button>
-        )}
-
-        {showScenarios && (
-          <div className="mt-4 pt-4 border-t border-line flex flex-col">
-            {completedScenarios.map((s, i) => (
-              <div
-                key={i}
-                className={`flex items-center gap-3 py-2.5 ${
-                  i !== completedScenarios.length - 1 ? 'border-b border-line' : ''
-                }`}
-              >
-                <span className="w-6 h-6 rounded-full bg-sageDark text-white text-[11px] flex items-center justify-center shrink-0">
-                  ✓
-                </span>
-                <p className="text-sm">{s.titre}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white border border-line rounded-2xl p-5 mb-3.5">
-        <p className="text-[13px] text-inkSoft mb-3">Régularité (7 derniers jours)</p>
-        <div className="flex items-end gap-2 mb-2">
-          {[...last7Dates].sort().map((dateStr) => (
-            <div
-              key={dateStr}
-              className={`flex-1 h-8 rounded-lg ${activeDates.has(dateStr) ? 'bg-sageDark' : 'bg-sagePale'}`}
-              title={dateStr}
-            />
+      <div className="mb-5">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-sageDark mb-2">
+          Langue cible
+        </label>
+        <select
+          value={langue}
+          onChange={(e) => setLangue(e.target.value)}
+          className="w-full px-4 py-3 rounded-2xl border border-line bg-white text-sm appearance-none"
+        >
+          {LANGUES.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
           ))}
-        </div>
-        <p className="text-sm text-inkSoft">
-          <span className="font-semibold text-ink">{activeDaysCount}</span> jour
-          {activeDaysCount > 1 ? 's' : ''} actif{activeDaysCount > 1 ? 's' : ''} sur les 7 derniers
-        </p>
+        </select>
       </div>
 
-      <div className="bg-white border border-line rounded-2xl p-5 mb-3.5">
-        <p className="text-[13px] text-inkSoft mb-3">Mots révisés par semaine</p>
-        <div className="flex items-end gap-2 h-24">
-          {weeks.map((w) => (
-            <div key={w.key} className="flex-1 flex flex-col items-center justify-end gap-1.5 h-full">
-              <div
-                className="w-full bg-coral rounded-t-md transition-all"
-                style={{ height: `${Math.max(4, (w.count / maxCount) * 100)}%` }}
-                title={`${w.count} mots`}
-              />
-              <span className="text-[10px] text-inkSoft">{formatWeekLabel(w.key)}</span>
-            </div>
+      <div className="mb-5">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-sageDark mb-2">
+          Type d'objectif
+        </label>
+        <div className="flex gap-2 flex-wrap">
+          {TYPES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setType(t.id)}
+              className={`px-4 py-3 rounded-full border text-sm font-medium ${
+                type === t.id ? 'bg-sageDark border-sageDark text-white' : 'bg-white border-line text-inkSoft'
+              }`}
+            >
+              {t.label}
+            </button>
           ))}
         </div>
       </div>
 
-      {objectif?.date_echeance && (
-        <div className="bg-white border border-line rounded-2xl p-5">
-          <p className="text-[13px] text-inkSoft mb-1.5">Jours avant l'échéance</p>
-          <p className="font-display text-3xl">{remaining}</p>
+      {type === 'travail' && (
+        <div className="mb-5">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-sageDark mb-2">
+            Ton métier / secteur
+          </label>
+          <input
+            type="text"
+            placeholder="Ex : infirmière, développeur, commercial…"
+            value={metier}
+            onChange={(e) => setMetier(e.target.value)}
+            className="w-full px-4 py-3 rounded-2xl border border-line bg-white text-sm"
+          />
         </div>
       )}
+
+      <div className="mb-5">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-sageDark mb-2">
+          Niveau de départ
+        </label>
+        <div className="flex gap-2 flex-wrap">
+          {NIVEAUX.map((n) => (
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => setNiveau(n.id)}
+              className={`px-4 py-3 rounded-full border text-sm font-medium ${
+                niveau === n.id ? 'bg-sageDark border-sageDark text-white' : 'bg-white border-line text-inkSoft'
+              }`}
+            >
+              {n.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-sageDark mb-2">
+          Échéance (optionnel)
+        </label>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="w-full px-4 py-3 rounded-2xl border border-line bg-white text-sm"
+        />
+      </div>
+
+      <button onClick={handleSubmit} className="w-full py-4 rounded-2xl bg-coral text-white font-semibold">
+        Générer mon parcours
+      </button>
     </div>
   );
 }
