@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="px-5 pt-14 flex flex-col min-h-screen">
+    <div className="px-5 pt-14 flex flex-col min-h-screen min-h-dvh">
       <div className="mb-10">
         <span className="font-display text-2xl font-semibold text-ink">
           Fluent <span className="italic font-normal text-sageDark">by</span>
