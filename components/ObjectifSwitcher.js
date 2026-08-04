@@ -38,12 +38,12 @@ export default function ObjectifSwitcher({ objectifs, activeId }) {
   }
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0 max-w-[150px]">
       <select
         value={activeId || ''}
         onChange={handleChange}
         disabled={switching}
-        className="text-xs font-semibold uppercase tracking-wide text-sageDark bg-sagePale pl-3 pr-6 py-1.5 rounded-full appearance-none disabled:opacity-60"
+        className="w-full text-xs font-semibold uppercase tracking-wide text-sageDark bg-sagePale pl-3 pr-6 py-1.5 rounded-full appearance-none disabled:opacity-60 truncate"
       >
         {objectifs.map((o) => (
           <option key={o.id} value={o.id}>
