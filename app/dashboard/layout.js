@@ -39,17 +39,17 @@ export default async function DashboardLayout({ children }) {
   }));
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <div className="flex items-center justify-between px-5 pt-6 pb-4">
-        <span className="font-display text-xl font-semibold text-ink">
+    <div className="flex flex-col min-h-screen min-h-dvh">
+      <div className="flex items-center justify-between gap-2 px-5 pt-6 pb-4">
+        <span className="font-display text-xl font-semibold text-ink shrink-0">
           Fluent <span className="italic font-normal text-sageDark">by</span>
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 shrink">
           <ObjectifSwitcher objectifs={objectifsForSwitcher} activeId={activeId} />
           <Link
             href="/dashboard/compte"
             aria-label="Mon compte"
-            className="w-8 h-8 rounded-full bg-white border border-line flex items-center justify-center text-sm text-inkSoft"
+            className="w-8 h-8 rounded-full bg-white border border-line flex items-center justify-center text-sm text-inkSoft shrink-0"
           >
             ⚙
           </Link>
