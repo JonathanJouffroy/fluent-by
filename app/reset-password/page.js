@@ -46,7 +46,7 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="px-5 pt-14 flex flex-col min-h-screen">
+    <div className="px-5 pt-14 flex flex-col min-h-screen min-h-dvh">
       <div className="mb-10">
         <span className="font-display text-2xl font-semibold text-ink">
           Fluent <span className="italic font-normal text-sageDark">by</span>
@@ -95,7 +95,7 @@ export default function ResetPasswordPage() {
   return (
     <Suspense
       fallback={
-        <div className="px-5 pt-14 flex flex-col min-h-screen">
+        <div className="px-5 pt-14 flex flex-col min-h-screen min-h-dvh">
           <div className="w-8 h-8 rounded-full border-4 border-sagePale border-t-sageDark animate-spin" />
         </div>
       }
