@@ -299,14 +299,14 @@ function ChatScenarioContent() {
   return (
     <div className="fixed inset-0 z-50 max-w-[480px] mx-auto flex flex-col bg-bg">
       <div className="flex items-center gap-3 px-5 py-4 border-b border-line bg-white">
-        <button onClick={() => router.push('/dashboard/scenarios')} className="text-xl px-1">
+        <button onClick={() => router.push('/dashboard/scenarios')} className="text-xl px-1 shrink-0">
           ←
         </button>
-        <div>
-          <h2 className="font-display text-[17px] font-medium flex items-center gap-2">
-            {scenario.titre}
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-[17px] font-medium flex items-center gap-2 flex-wrap">
+            <span className="truncate">{scenario.titre}</span>
             {scenario.complete && (
-              <span className="text-[10px] bg-sagePale text-sageDark px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide">
+              <span className="text-[10px] bg-sagePale text-sageDark px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide shrink-0">
                 Terminé
               </span>
             )}
