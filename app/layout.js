@@ -29,12 +29,13 @@ export const metadata = {
 
 export const viewport = {
   themeColor: '#4F6B4C',
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="fr" className={`${fraunces.variable} ${inter.variable}`}>
-      <body className="font-sans max-w-[480px] mx-auto min-h-screen bg-bg relative">
+      <body className="font-sans max-w-[480px] mx-auto min-h-screen min-h-dvh bg-bg relative">
         {children}
       </body>
     </html>
