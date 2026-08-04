@@ -5,6 +5,7 @@
 html, body {
   background-color: #F6F3EA;
   color: #2C3630;
+  overflow-x: hidden;
 }
 
 * {
